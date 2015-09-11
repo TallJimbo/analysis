@@ -1,4 +1,6 @@
+import numpy as np
 from lsst.obs.hsc import HscMapper
+from lsst.afw.image import Filter
 
 def splitCoaddId(oid, asDict=True, hasFilter=True):
     """Split an ObjectId (maybe an numpy array) into tract, patch, [filter], and objId.
@@ -6,8 +8,8 @@ def splitCoaddId(oid, asDict=True, hasFilter=True):
     """
 
     oid = np.array(oid, dtype='int64')
-    objId = np.bitwise_and(oid, 2**mapper._nbit_id - 1)
-    oid >>= mapper._nbit_id
+    objId = np.bitwise_and(oid, 2**HscMapper._nbit_id - 1)
+    oid >>= HscMapper._nbit_id
 
     if hasFilter:
         filterId = np.bitwise_and(oid, 2**HscMapper._nbit_filter - 1).astype('int32')
@@ -19,11 +21,11 @@ def splitCoaddId(oid, asDict=True, hasFilter=True):
             filterId = [int(filterId)] # as you can't iterate over a length-1 np array
 
         for fid in set(filterId):
-            name = afwImage.Filter(int(fid)).getName()
+            name = Filter(int(fid)).getName()
 
             filesystemName = "HSC-%s" % name.upper() # name mapper needs
             try:
-                afwImage.Filter(filesystemName)
+                Filter(filesystemName)
                 name = filesystemName
             except:
                 pass
@@ -38,7 +40,7 @@ def splitCoaddId(oid, asDict=True, hasFilter=True):
     oid >>= HscMapper._nbit_patch
     add = np.core.defchararray.add # why isn't this easier to find?
     patch = add(add(patchX.astype(str), ","), patchY.astype(str))
-    patch.shape = filterName.shape # why do I have to do this?
+    #patch.shape = filterName.shape # why do I have to do this?
 
     tract = oid.astype('int32')
 
