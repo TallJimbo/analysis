@@ -1,0 +1,6 @@
+*.fits
+*.fits.gz
+*.png
+*.jpeg
+*.jpg
+.ipynb_checkpoints
