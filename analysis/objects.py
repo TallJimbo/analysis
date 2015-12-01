@@ -13,8 +13,8 @@ REF_PREFIXES = ("id", "coord", "parent", "detect", "merge")
 SHARED_PREFIXES = ("flags", "deblend", "calib")
 
 # Flux fields that should have associated magnitude fields created for them.
-MAG_FIELDS = ("flux.gaussian", "flux.psf", "flux.kron",
-              "cmodel.flux", "cmodel.exp.flux", "cmodel.dev.flux", "cmodel.initial.flux")
+MAG_FIELDS = ("flux.gaussian", "flux.psf", "flux.kron", "flux.aperture",
+              "cmodel.flux", "cmodel.exp.flux", "cmodel.dev.flux", "cmodel.initial.flux",)
 
 
 CALCULATED_FIELDS = {}
@@ -96,6 +96,12 @@ class ColumnAttributeProxy(object):
         names.sort()
         return names
 
+    def get(self, k):
+        current = self
+        for term in k.split("."):
+            current = getattr(current, term)
+        return current.value
+    
     def __getattr__(self, name):
         return self._children[name]
 
@@ -142,7 +148,7 @@ class ObjectCatalog(ColumnAttributeProxy):
 
     @classmethod
     def read(cls, butler, dataIds=(), tracts=(), tract=None, patches=(), patch=None,
-             filters=None, filter=None, forced=True, meas=True, images=True, footprints="heavy"):
+             filters=None, filter=None, forced=True, meas=True, images=True, footprints="heavy", progress=True):
 
         dataIds = list(dataIds)
         if filters is None:
@@ -209,11 +215,11 @@ class ObjectCatalog(ColumnAttributeProxy):
                     assignCol(tuple(name.split(".")), subcol)
             refCats[n] = None   # allow garbage collection
 
-            for b in filters:
-
+            for nb, b in enumerate(filters):
+                
                 if meas or forced or images:
-                    logging.debug("Reading deepCoadd for {}, {}".format(b, dataId))
-                    coadd = butler.get("deepCoadd", dataId, immediate=True,
+                    logging.debug("Reading deepCoadd_calexp for {}, {}".format(b, dataId))
+                    coadd = butler.get("deepCoadd_calexp", dataId, immediate=True,
                                        filter="HSC-"+b.upper())
                     calib = coadd.getCalib()
 
@@ -231,7 +237,15 @@ class ObjectCatalog(ColumnAttributeProxy):
                             key = (b, "meas") + tuple(name.split("."))
                         assignCol(key, subcol)
                         if name in MAG_FIELDS:
-                            mag, magErr = calib.getMagnitude(subcol, d[name + ".err"])
+                            if subcol.ndim == 1:
+                                mag, magErr = calib.getMagnitude(subcol, d[name + ".err"])
+                            elif subcol.ndim == 2:
+                                mag = numpy.zeros(subcol.shape, dtype=float)
+                                magErr = numpy.zeros(subcol.shape, dtype=float)
+                                for i in xrange(subcol.shape[1]):
+                                    mag[:,i], magErr[:,i] = calib.getMagnitude(subcol[:,i], d[name + ".err"][:,i])
+                            else:
+                                raise ValueError("Flux field with dimension > 1 not supported")
                             magKey = (b, "meas") + tuple(name.replace("flux", "mag").split("."))
                             assignCol(magKey, mag)
                             assignCol(magKey + ("err",), magErr)
@@ -267,7 +281,15 @@ class ObjectCatalog(ColumnAttributeProxy):
                             key = (b, "forced") + tuple(name.split("."))
                         assignCol(key, subcol)
                         if name in MAG_FIELDS:
-                            mag, magErr = calib.getMagnitude(subcol, d[name + ".err"])
+                            if subcol.ndim == 1:
+                                mag, magErr = calib.getMagnitude(subcol, d[name + ".err"])
+                            elif subcol.ndim == 2:
+                                mag = numpy.zeros(subcol.shape, dtype=float)
+                                magErr = numpy.zeros(subcol.shape, dtype=float)
+                                for i in xrange(subcol.shape[1]):
+                                    mag[:,i], magErr[:,i] = calib.getMagnitude(subcol[:,i], d[name + ".err"][:,i])
+                            else:
+                                raise ValueError("Flux field with dimension > 1 not supported")
                             magKey = (b, "forced") + tuple(name.replace("flux", "mag").split("."))
                             assignCol(magKey, mag)
                             assignCol(magKey + ("err",), magErr)
@@ -300,7 +322,7 @@ class ObjectCatalog(ColumnAttributeProxy):
 
     def __getitem__(self, k):
         r = ColumnAttributeProxy.__getitem__(self, k)
-        r.coadds = self._coadds
+        r._coadds = self._coadds
         r.filters = self.filters
         return r
 
